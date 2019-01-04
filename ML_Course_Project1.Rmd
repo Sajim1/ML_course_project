@@ -1,0 +1,141 @@
+---
+title: "Data Analysis for Weight Lifting Excercise Data set"
+output:
+  pdf_document: default
+  word_document: default
+  md_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Abstarct
+
+The goal of this project is to predict the manner in which  the weight lifting exercise is done.To accomplish the goal of the project, first the relevent data ia downloaded and red. Then, the data is cleaned to remove measuremnets with largely missed or no measuremnets. Then, the cleaned data is partitioned to training and testing parts to cross validate different machine learning algorithms. Various machine learning algorithms such as random forest and decision tree aare implemented on the data set. The out of bag error is estimated using the validation data set. These steps are explained here:
+
+## reading data
+ first step is to read the data and acquired the required R pachages.
+```{r read_d,cache=TRUE,include=T,echo=T,results='hide'}
+f_d <- getwd()
+dt_training <- read.table(paste0(f_d,"/pml-training.csv"),sep = ",",header=T,na.strings=c("NA","#DIV/0!", ""))
+dt_testing <- read.table(paste0(f_d,"/pml-testing.csv"),sep = ",",header=T,na.strings=c("NA","#DIV/0!", ""))
+
+summary(dt_training)
+
+# required libraries
+library(caret)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(e1071)
+library(gbm)
+library(survival)
+library(splines)
+library(plyr)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(RColorBrewer)
+```
+
+## cleaning data
+
+The, clean the data with removing the measurements with high number of NA's or near zero variance.
+
+```{r clean_d,cache=TRUE}
+
+dt_training <- dt_training[,3:160]
+
+v_na <- numeric()
+
+for (i in 1:dim(dt_training)[2]) {
+  
+  if (sum(is.na(dt_training[,i]))>0.95*dim(dt_training)[1]) {v_na=c(v_na,i)}
+}
+
+dt_training <- dt_training[,-v_na]
+dim(dt_training)
+
+#dt_training <- dt_tr[complete.cases(dt_training),]
+
+v_zv <- nearZeroVar(dt_training, saveMetrics = TRUE)
+
+dt_training <- dt_training[, v_zv$nzv==FALSE]
+
+dt_training$classe = factor(dt_training$classe)
+
+dim(dt_training)
+
+dt_testing <- dt_testing[, 3:160]
+dt_testing <- dt_testing[, -v_na]
+dt_testing <- dt_testing[, v_zv$nzv==FALSE]
+
+dim(dt_testing)
+```
+
+## partitioning data
+
+The, the clead data is partitioned to two sets one for training and one for validation to estimated the error.
+
+```{r part_d,cache=TRUE}
+inTrain = createDataPartition(dt_training$classe, p = .6)[[1]]
+
+dt_training1 =dt_training[ inTrain,]
+
+dt_cv1 = dt_training[-inTrain,]
+
+```
+
+## Implementing ML algorithms
+
+Two ML algorithms including random forest and decision tree are implemented.
+
+```{r ML_dt, cache=TRUE}
+set.seed(200)
+mod1 <- rpart(classe ~ ., data=dt_training1, method="class")
+
+fancyRpartPlot(mod1)
+
+confusionMatrix(predict(mod1,newdata=dt_cv1, type="class"),dt_cv1$classe)
+
+```
+
+```{r ML_rf, cache=TRUE}
+set.seed(200)
+mod2 <- train(classe ~ ., data=dt_training1, method="rf")
+
+v_IO <- varImp(mod2)
+
+plot(v_IO, main = "Top 30 most important Variables", top = 30)
+
+confusionMatrix(predict(mod2,newdata=dt_cv1),dt_cv1$classe)
+
+mod1$finalModel
+mod2$finalModel
+
+```
+
+
+
+## Error calculation
+
+The accuracy level of decision tree is about 87% and for random forest is about 99%. As the random forest algorithm's accuracy level suggest, this method work very well for predicting the outcome of the validation set.
+
+## predictions
+
+Here is the predict outcome levels on the original Testing data set using Random Forest algorithm that generated the lowest error rate.
+
+```{r pd_rf, cache=TRUE}
+predict_testset <- predict.train(mod2, dt_testing)
+predict_testset
+```
+
+
+## conclusion
+
+The Random Forest method yielded better results. The Confusion Matrix achieved 99.9% accuracy. The Out of Sample Error achieved 99.7449 %. Since Random forests works well when there is a large number of inputs, especially when the interactions between variables are unknow and also can handle unscaled variables and categorical variables, Random Forest is selected to be used for the final predictions.
+
+
